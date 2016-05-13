@@ -22,12 +22,10 @@ after_initialize do
 
   module ListHelper
     class << self
-      def create_thumbnails(id, image, original_url)
-        normal = image ? thumbnail_url(image, 100, 100) : original_url
-        retina = image ? thumbnail_url(image, 200, 200) : original_url
-        thumbnails = { normal: normal, retina: retina }
-        save_thumbnails(id, thumbnails)
-        return thumbnails
+      def create_thumbnails(image)
+        normal = image ? thumbnail_url(image, 100, 100) : ''
+        retina = image ? thumbnail_url(image, 200, 200) : ''
+        { normal: normal, retina: retina }
       end
 
       def thumbnail_url (image, w, h)
@@ -40,6 +38,7 @@ after_initialize do
         topic = Topic.find(id)
         topic.custom_fields['thumbnails'] = thumbnails
         topic.save_custom_fields
+        thumbnails
       end
     end
   end
@@ -65,7 +64,7 @@ after_initialize do
   class ::CookedPostProcessor
 
     def get_linked_image(url)
-      max_size = SiteSetting.max_image_size_kb.kilobytes
+      max_size = 99999999999
       file = FileHelper.download(url, max_size, "discourse", true) rescue nil
       image = file ? Upload.create_for(@post.user_id, file, file.path.split('/')[-1], File.size(file.path)) : nil
       image
@@ -74,7 +73,8 @@ after_initialize do
     def create_topic_thumbnails(url)
       local = UrlHelper.is_local(url)
       image = local ? Upload.find_by(sha1: url[/[a-z0-9]{40,}/i]) : get_linked_image(url)
-      ListHelper.create_thumbnails(@post.topic.id, image, url)
+      thumbnails = ListHelper.create_thumbnails(image)
+      ListHelper.save_thumbnails(@post.topic.id, thumbnails)
     end
 
     def update_topic_image
@@ -106,7 +106,8 @@ after_initialize do
 
     def get_thumbnails_from_image_url
       image = Upload.get_from_url(object.image_url) rescue false
-      return ListHelper.create_thumbnails(object.id, image, object.image_url)
+      thumbnails = ListHelper.create_thumbnails(image)
+      return ListHelper.save_thumbnails(object.id, thumbnails)
     end
 
     def thumbnails_present?(thumbnails)
